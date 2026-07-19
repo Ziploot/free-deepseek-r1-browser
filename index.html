@@ -556,7 +556,7 @@
 
   </div>
 
-  <!-- Import WebLLM from official jsdelivr ESM bundle directly (clean and resolved exports) -->
+  <!-- Import WebLLM from official jsdelivr ESM bundle directly with VRAM overrides inside config -->
   <script type="module">
     import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
@@ -609,6 +609,7 @@
       progressText.textContent = "Downloading model metadata...";
 
       try {
+        // Configure strict low VRAM limits overrides to prevent null GPUDevice context losses on standard browsers
         engine = await CreateMLCEngine(selectedModel, {
           initProgressCallback: (report) => {
             const percentage = Math.round(report.progress * 100);
@@ -618,6 +619,10 @@
             if (percentage >= 100) {
               progressText.textContent = "Model Compiled! Setting up GPU Shaders...";
             }
+          },
+          overrides: {
+            context_window_size: 1024,
+            prefill_chunk_size: 256
           }
         });
 
@@ -631,8 +636,8 @@
         btnLoad.textContent = "Model Loaded Successfully";
         
       } catch (err) {
-        console.error(err);
-        progressText.textContent = "Error loading model. Check browser memory.";
+        console.error("Initialization Failed:", err);
+        progressText.textContent = "Error: " + err.message;
         btnLoad.disabled = false;
         modelSelect.disabled = false;
       }
