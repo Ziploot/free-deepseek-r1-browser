@@ -644,38 +644,28 @@
     // 3. Chat submission logic
     async function handleSend() {
       const prompt = promptInput.value.trim();
-      if (!prompt) return;
+      if (!prompt || promptInput.disabled) return;
 
-      // Prevent sending duplicate prompts if already loading
-      if (btnLoad.disabled && !engine) return;
+      addMessage(prompt, "user");
+      promptInput.value = "";
+      promptInput.style.height = "auto";
+      promptInput.disabled = true;
+      btnSend.disabled = true;
 
       if (!engine) {
-        // Log the user prompt
-        addMessage(prompt, "user");
-        promptInput.value = "";
-        promptInput.disabled = true;
-        btnSend.disabled = true;
-
         try {
           await loadModel();
         } catch (err) {
-          const msgRow = document.createElement("div");
-          msgRow.className = "msg-row assistant";
-          msgRow.innerHTML = `<div class="bubble">Failed to initialize WebGPU Engine: ${err.message || err}. Ensure WebGPU is supported and try again.</div>`;
-          chatMessages.appendChild(msgRow);
+          addMessage("Model load failed: " + (err.message || err), "assistant");
           promptInput.disabled = false;
           btnSend.disabled = false;
           return;
         }
-
-        await generateResponse(prompt);
-      } else {
-        addMessage(prompt, "user");
-        promptInput.value = "";
-        promptInput.disabled = true;
-        btnSend.disabled = true;
-        await generateResponse(prompt);
       }
+
+      await generateResponse(prompt);
+      promptInput.disabled = false;
+      btnSend.disabled = false;
     }
 
     async function generateResponse(prompt) {
