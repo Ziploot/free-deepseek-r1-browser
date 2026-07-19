@@ -556,9 +556,9 @@
 
   </div>
 
-  <!-- Import WebLLM from ESM CDN -->
+  <!-- Import WebLLM from ESM.sh CDN (fixes jsdelivr Rollup bundler bugs) -->
   <script type="module">
-    import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+    import { CreateMLCEngine } from "https://esm.sh/@mlc-ai/web-llm";
 
     let engine = null;
     const webgpuAlert = document.getElementById("webgpuAlert");
@@ -578,16 +578,24 @@
 
     // 1. Check for WebGPU Support upfront
     if (!navigator.gpu) {
-      webgpuAlert.style.display = "block";
-      btnLoad.disabled = true;
-      console.warn("WebGPU not supported in this browser.");
+      showWebGpuError();
     } else {
-      // Query GPU details
       navigator.gpu.requestAdapter().then(adapter => {
         if (adapter) {
           statDevice.textContent = adapter.info?.device || "WebGPU Compatible Device";
+        } else {
+          showWebGpuError();
         }
+      }).catch(err => {
+        showWebGpuError();
       });
+    }
+
+    function showWebGpuError() {
+      webgpuAlert.style.display = "block";
+      btnLoad.disabled = true;
+      statusText.textContent = "WebGPU Disabled";
+      console.warn("WebGPU not supported or disabled in this browser.");
     }
 
     // 2. Initialize and Load model
@@ -601,7 +609,7 @@
       progressText.textContent = "Downloading model metadata...";
 
       try {
-        engine = await webllm.CreateMLCEngine(selectedModel, {
+        engine = await CreateMLCEngine(selectedModel, {
           initProgressCallback: (report) => {
             const percentage = Math.round(report.progress * 100);
             progressBar.style.width = percentage + "%";
