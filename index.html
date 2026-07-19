@@ -541,8 +541,8 @@
         <!-- Inputs Box -->
         <div class="chat-input-wrap">
           <div class="input-row">
-            <textarea id="promptInput" placeholder="Ask DeepSeek-R1 anything... (press Enter)" disabled></textarea>
-            <button class="btn-send" id="btnSend" disabled>
+            <textarea id="promptInput" placeholder="Ask DeepSeek-R1 anything... (press Enter)"></textarea>
+            <button class="btn-send" id="btnSend">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
@@ -556,7 +556,7 @@
 
   </div>
 
-  <!-- Import WebLLM from official jsdelivr ESM bundle directly with VRAM overrides inside config -->
+  <!-- Import WebLLM from ESM CDN -->
   <script type="module">
     import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
@@ -578,24 +578,16 @@
 
     // 1. Check for WebGPU Support upfront
     if (!navigator.gpu) {
-      showWebGpuError();
+      webgpuAlert.style.display = "block";
+      btnLoad.disabled = true;
+      console.warn("WebGPU not supported in this browser.");
     } else {
+      // Query GPU details
       navigator.gpu.requestAdapter().then(adapter => {
         if (adapter) {
           statDevice.textContent = adapter.info?.device || "WebGPU Compatible Device";
-        } else {
-          showWebGpuError();
         }
-      }).catch(err => {
-        showWebGpuError();
       });
-    }
-
-    function showWebGpuError() {
-      webgpuAlert.style.display = "block";
-      btnLoad.disabled = true;
-      statusText.textContent = "WebGPU Disabled";
-      console.warn("WebGPU not supported or disabled in this browser.");
     }
 
     // 2. Initialize and Load model
@@ -604,12 +596,13 @@
       
       btnLoad.disabled = true;
       modelSelect.disabled = true;
+      promptInput.disabled = true;
+      btnSend.disabled = true;
       progressContainer.style.display = "flex";
       progressBar.style.width = "0%";
       progressText.textContent = "Downloading model metadata...";
 
       try {
-        // Configure strict low VRAM limits overrides to prevent null GPUDevice context losses on standard browsers
         engine = await CreateMLCEngine(selectedModel, {
           initProgressCallback: (report) => {
             const percentage = Math.round(report.progress * 100);
@@ -619,7 +612,8 @@
             if (percentage >= 100) {
               progressText.textContent = "Model Compiled! Setting up GPU Shaders...";
             }
-          },
+          }
+        }, {
           overrides: {
             context_window_size: 1024,
             prefill_chunk_size: 256
@@ -636,10 +630,12 @@
         btnLoad.textContent = "Model Loaded Successfully";
         
       } catch (err) {
-        console.error("Initialization Failed:", err);
+        console.error(err);
         progressText.textContent = "Error: " + err.message;
         btnLoad.disabled = false;
         modelSelect.disabled = false;
+        promptInput.disabled = false;
+        btnSend.disabled = false;
       }
     }
 
@@ -648,14 +644,41 @@
     // 3. Chat submission logic
     async function handleSend() {
       const prompt = promptInput.value.trim();
-      if (!prompt || !engine) return;
+      if (!prompt) return;
 
-      // Add user message to log
-      addMessage(prompt, "user");
-      promptInput.value = "";
-      promptInput.disabled = true;
-      btnSend.disabled = true;
+      // Prevent sending duplicate prompts if already loading
+      if (btnLoad.disabled && !engine) return;
 
+      if (!engine) {
+        // Log the user prompt
+        addMessage(prompt, "user");
+        promptInput.value = "";
+        promptInput.disabled = true;
+        btnSend.disabled = true;
+
+        try {
+          await loadModel();
+        } catch (err) {
+          const msgRow = document.createElement("div");
+          msgRow.className = "msg-row assistant";
+          msgRow.innerHTML = `<div class="bubble">Failed to initialize WebGPU Engine: ${err.message || err}. Ensure WebGPU is supported and try again.</div>`;
+          chatMessages.appendChild(msgRow);
+          promptInput.disabled = false;
+          btnSend.disabled = false;
+          return;
+        }
+
+        await generateResponse(prompt);
+      } else {
+        addMessage(prompt, "user");
+        promptInput.value = "";
+        promptInput.disabled = true;
+        btnSend.disabled = true;
+        await generateResponse(prompt);
+      }
+    }
+
+    async function generateResponse(prompt) {
       // Auto scroll
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
