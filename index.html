@@ -556,9 +556,9 @@
 
   </div>
 
-  <!-- Import WebLLM from ESM.sh CDN (fixes jsdelivr Rollup bundler bugs) -->
+  <!-- Import WebLLM from official jsdelivr ESM bundle directly (clean and resolved exports) -->
   <script type="module">
-    import { CreateMLCEngine } from "https://esm.sh/@mlc-ai/web-llm";
+    import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
     let engine = null;
     const webgpuAlert = document.getElementById("webgpuAlert");
