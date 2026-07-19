@@ -1,0 +1,9 @@
+{
+  "name": "free-deepseek-r1-browser",
+  "version": "1.0.0",
+  "description": "Run DeepSeek R1 natively in browser with WebGPU",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve -l 8000"
+  }
+}
