@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepSeek R1 — Browser WebGPU Sandbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --void: #000510;
+      --panel: rgba(8, 14, 42, 0.72);
+      --panel-hard: #050c22;
+      --border: rgba(255, 255, 255, 0.07);
+      --border-lit: rgba(100, 110, 255, 0.3);
+      --ink-0: #ffffff;
+      --ink-1: #e2e8f0;
+      --ink-2: #94a3b8;
+      --ink-3: #3d4f6b;
+      --v: #818cf8;
+      --p: #c084fc;
+      --c: #22d3ee;
+      --g: #4ade80;
+      --grd-a: linear-gradient(135deg, #818cf8, #c084fc, #22d3ee);
+      --font-d: 'Syne', sans-serif;
+      --font-m: 'Space Mono', monospace;
+      --font-b: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--void);
+      background-image: radial-gradient(circle, rgba(129, 140, 248, 0.05) 1px, transparent 1px);
+      background-size: 32px 32px;
+      color: var(--ink-2);
+      font-family: var(--font-b);
+      font-size: 16px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Animated background blobs */
+    body::before, body::after {
+      content: '';
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(95px);
+      opacity: 0.12;
+      width: 600px;
+      height: 600px;
+    }
+    body::before {
+      background: radial-gradient(circle, #818cf8 0%, transparent 70%);
+      top: -200px;
+      left: -200px;
+    }
+    body::after {
+      background: radial-gradient(circle, #22d3ee 0%, transparent 70%);
+      bottom: -200px;
+      right: -200px;
+    }
+
+    .app-wrap {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      z-index: 10;
+      height: 100vh;
+      max-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--panel);
+      border: 1px solid var(--border-lit);
+      border-radius: 20px;
+      padding: 16px 24px;
+      backdrop-filter: blur(20px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    .logo {
+      font-family: var(--font-d);
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--ink-0);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .logo span {
+      background: var(--grd-a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-badge {
+      font-family: var(--font-m);
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444; /* Default to Offline/disconnected */
+      box-shadow: 0 0 8px #ef4444;
+    }
+    .status-dot.active {
+      background: var(--g);
+      box-shadow: 0 0 8px var(--g);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.6; }
+    }
+
+    /* ── LAYOUT ── */
+    .app-body {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      flex: 1;
+      min-height: 0; /* Important for flex-scrolling child */
+      margin-bottom: 16px;
+    }
+
+    /* Sidebar controls */
+    .sidebar {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      backdrop-filter: blur(20px);
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .control-label {
+      font-family: var(--font-m);
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      font-weight: bold;
+    }
+    select, button {
+      width: 100%;
+      background: rgba(2, 6, 24, 0.8);
+      border: 1px solid var(--border-lit);
+      border-radius: 10px;
+      color: var(--ink-1);
+      padding: 12px 14px;
+      font-family: var(--font-b);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.25s;
+    }
+    select:focus {
+      border-color: var(--c);
+      box-shadow: 0 0 10px rgba(34, 211, 238, 0.15);
+    }
+    .btn-load {
+      background: var(--grd-a);
+      color: #fff;
+      font-family: var(--font-d);
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(129, 140, 248, 0.3);
+    }
+    .btn-load:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(129, 140, 248, 0.45);
+    }
+    .btn-load:disabled {
+      background: var(--ink-3);
+      color: var(--ink-2);
+      transform: none;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* Diagnostics & Stats */
+    .stats-panel {
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-family: var(--font-m);
+      font-size: 12px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      color: var(--ink-2);
+    }
+    .stat-row span:last-child {
+      color: var(--c);
+      font-weight: bold;
+    }
+
+    /* ── CHAT SCREEN ── */
+    .chat-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+
+    /* Bubbles */
+    .msg-row {
+      display: flex;
+      width: 100%;
+    }
+    .msg-row.user { justify-content: flex-end; }
+    .msg-row.assistant { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 80%;
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-size: 15px;
+      line-height: 1.6;
+      word-wrap: break-word;
+    }
+    .user .bubble {
+      background: rgba(129, 140, 248, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      color: var(--ink-0);
+      border-bottom-right-radius: 4px;
+    }
+    .assistant .bubble {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      color: var(--ink-1);
+      border-top-left-radius: 4px;
+    }
+
+    /* ── DEEPSEEK REASONING BLOCK (THINK) ── */
+    .think-block {
+      background: rgba(34, 211, 238, 0.04);
+      border-left: 3px solid var(--c);
+      padding: 12px 16px;
+      border-radius: 0 12px 12px 0;
+      margin-bottom: 12px;
+      font-family: var(--font-b);
+      font-size: 14px;
+      color: var(--ink-2);
+    }
+    .think-header {
+      font-family: var(--font-m);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--c);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .think-loader {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--c);
+      animation: thinkPulse 1.2s infinite;
+    }
+    @keyframes thinkPulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    /* ── CODE COPY BUTTONS ── */
+    .code-block-wrap {
+      position: relative;
+      margin: 14px 0;
+    }
+    pre {
+      background: #020b1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+    code {
+      font-family: var(--font-m);
+      font-size: 13px;
+      color: var(--c);
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(129, 140, 248, 0.15);
+      border: 1px solid rgba(129, 140, 248, 0.35);
+      color: #a5b4fc;
+      font-family: var(--font-m);
+      font-size: 9px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: auto;
+      z-index: 10;
+    }
+    .copy-btn:hover { background: rgba(129, 140, 248, 0.3); color: #fff; }
+    .copy-btn.copied { background: rgba(74, 222, 128, 0.2); color: #4ade80; border-color: rgba(74, 222, 128, 0.4); }
+
+    /* ── PROGRESS BAR ── */
+    .progress-container {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .progress-text {
+      font-family: var(--font-m);
+      font-size: 11px;
+      color: var(--ink-2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--grd-a);
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px var(--c);
+    }
+
+    /* ── INPUT BOX ── */
+    .chat-input-wrap {
+      padding: 16px 24px 24px;
+      border-top: 1px solid var(--border);
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+      background: rgba(2, 6, 24, 0.7);
+      border: 1px solid var(--border-lit);
+      border-radius: 14px;
+      padding: 8px 12px;
+      align-items: center;
+      transition: border-color 0.25s;
+    }
+    .input-row:focus-within {
+      border-color: var(--v);
+      box-shadow: 0 0 12px rgba(129, 140, 248, 0.15);
+    }
+    textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--ink-0);
+      font-family: var(--font-b);
+      font-size: 15px;
+      resize: none;
+      height: 24px;
+      max-height: 120px;
+      scrollbar-width: none;
+    }
+    .btn-send {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--grd-a);
+      border: none;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      padding: 0;
+      transition: transform 0.2s;
+    }
+    .btn-send:hover { transform: scale(1.05); }
+    .btn-send:disabled { background: var(--ink-3); transform: none; cursor: not-allowed; }
+
+    /* WebGPU Alert */
+    .alert-webgpu {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      display: none;
+      font-size: 14px;
+    }
+
+    @media (max-width: 768px) {
+      .app-body {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        order: 2;
+      }
+      .chat-container {
+        order: 1;
+        height: 60vh;
+      }
+      .app-wrap {
+        height: auto;
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-wrap">
+    
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <span>DeepSeek R1</span> Browser Sandbox
+      </div>
+      <div class="status-badge">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Error Alert -->
+    <div class="alert-webgpu" id="webgpuAlert">
+      ⚠️ <strong>WebGPU Not Detected!</strong> Your browser does not support WebGPU. Please use a modern browser (like Google Chrome, Microsoft Edge, or Firefox Developer Edition v113+) and ensure hardware acceleration is enabled in settings.
+    </div>
+
+    <!-- Main Content -->
+    <div class="app-body">
+      
+      <!-- Sidebar Controls -->
+      <div class="sidebar">
+        <div class="control-group">
+          <label class="control-label">Select Model</label>
+          <select id="modelSelect">
+            <option value="DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC">DeepSeek-R1-Distill (Qwen 1.5B - 900MB)</option>
+            <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2 (1B Parameter - 600MB)</option>
+          </select>
+        </div>
+
+        <button class="btn-load" id="btnLoad">Initialize Model</button>
+
+        <!-- Progress Tracker -->
+        <div class="progress-container" id="progressContainer">
+          <div class="progress-text" id="progressText">Initializing WebGPU...</div>
+          <div class="progress-track">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+        </div>
+
+        <!-- Performance Stats -->
+        <div class="stats-panel">
+          <div class="control-label">Metrics &amp; Hardware</div>
+          <div class="stat-row">
+            <span>Device</span>
+            <span id="statDevice">WebGPU Generic</span>
+          </div>
+          <div class="stat-row">
+            <span>Engine Speed</span>
+            <span id="statSpeed">- t/s</span>
+          </div>
+          <div class="stat-row">
+            <span>RAM Usage</span>
+            <span id="statRam">- MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Screen -->
+      <div class="chat-container">
+        <!-- Message Logs -->
+        <div class="chat-messages" id="chatMessages">
+          <div class="msg-row assistant">
+            <div class="bubble">
+              Hello! I am DeepSeek-R1 running natively inside your browser. 
+              Initialize the model in the sidebar, and I will be ready to reason offline!
+            </div>
+          </div>
+        </div>
+
+        <!-- Inputs Box -->
+        <div class="chat-input-wrap">
+          <div class="input-row">
+            <textarea id="promptInput" placeholder="Ask DeepSeek-R1 anything... (press Enter)" disabled></textarea>
+            <button class="btn-send" id="btnSend" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Import WebLLM from ESM CDN -->
+  <script type="module">
+    import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+    let engine = null;
+    const webgpuAlert = document.getElementById("webgpuAlert");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const modelSelect = document.getElementById("modelSelect");
+    const btnLoad = document.getElementById("btnLoad");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressText = document.getElementById("progressText");
+    const progressBar = document.getElementById("progressBar");
+    const chatMessages = document.getElementById("chatMessages");
+    const promptInput = document.getElementById("promptInput");
+    const btnSend = document.getElementById("btnSend");
+    
+    const statDevice = document.getElementById("statDevice");
+    const statSpeed = document.getElementById("statSpeed");
+
+    // 1. Check for WebGPU Support upfront
+    if (!navigator.gpu) {
+      webgpuAlert.style.display = "block";
+      btnLoad.disabled = true;
+      console.warn("WebGPU not supported in this browser.");
+    } else {
+      // Query GPU details
+      navigator.gpu.requestAdapter().then(adapter => {
+        if (adapter) {
+          statDevice.textContent = adapter.info?.device || "WebGPU Compatible Device";
+        }
+      });
+    }
+
+    // 2. Initialize and Load model
+    async function loadModel() {
+      const selectedModel = modelSelect.value;
+      
+      btnLoad.disabled = true;
+      modelSelect.disabled = true;
+      progressContainer.style.display = "flex";
+      progressBar.style.width = "0%";
+      progressText.textContent = "Downloading model metadata...";
+
+      try {
+        engine = await webllm.CreateMLCEngine(selectedModel, {
+          initProgressCallback: (report) => {
+            const percentage = Math.round(report.progress * 100);
+            progressBar.style.width = percentage + "%";
+            progressText.textContent = report.text;
+            
+            if (percentage >= 100) {
+              progressText.textContent = "Model Compiled! Setting up GPU Shaders...";
+            }
+          }
+        });
+
+        // Update UI state to Active
+        statusDot.className = "status-dot active";
+        statusText.textContent = "Online / Local";
+        progressContainer.style.display = "none";
+        promptInput.disabled = false;
+        btnSend.disabled = false;
+        promptInput.placeholder = "Type your prompt here...";
+        btnLoad.textContent = "Model Loaded Successfully";
+        
+      } catch (err) {
+        console.error(err);
+        progressText.textContent = "Error loading model. Check browser memory.";
+        btnLoad.disabled = false;
+        modelSelect.disabled = false;
+      }
+    }
+
+    btnLoad.addEventListener("click", loadModel);
+
+    // 3. Chat submission logic
+    async function handleSend() {
+      const prompt = promptInput.value.trim();
+      if (!prompt || !engine) return;
+
+      // Add user message to log
+      addMessage(prompt, "user");
+      promptInput.value = "";
+      promptInput.disabled = true;
+      btnSend.disabled = true;
+
+      // Auto scroll
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      // Prepare assistant bubble row
+      const bubbleId = "bubble-" + Date.now();
+      const msgRow = document.createElement("div");
+      msgRow.className = "msg-row assistant";
+      msgRow.innerHTML = `<div class="bubble" id="${bubbleId}"><div class="think-block" style="display:none;"><div class="think-header"><span class="think-loader"></span>Thinking Process</div><div class="think-content"></div></div><div class="answer-content">Generating...</div></div>`;
+      chatMessages.appendChild(msgRow);
+
+      const bubble = document.getElementById(bubbleId);
+      const thinkBlock = bubble.querySelector(".think-block");
+      const thinkContent = bubble.querySelector(".think-content");
+      const answerContent = bubble.querySelector(".answer-content");
+
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      try {
+        const messages = [
+          { role: "user", content: prompt }
+        ];
+
+        let accumulatedText = "";
+        let startTime = performance.now();
+        let totalTokens = 0;
+
+        const chatCompletion = await engine.chat.completions.create({
+          messages: messages,
+          stream: true
+        });
+
+        for await (const chunk of chatCompletion) {
+          const content = chunk.choices[0]?.delta?.content || "";
+          accumulatedText += content;
+          totalTokens++;
+
+          // Update tokens speed metric
+          const elapsedSec = (performance.now() - startTime) / 1000;
+          const tokensPerSec = Math.round(totalTokens / elapsedSec);
+          statSpeed.textContent = tokensPerSec + " t/s";
+
+          // Parse CoT tags
+          const parsed = parseCoT(accumulatedText);
+          
+          if (parsed.thinking) {
+            thinkBlock.style.display = "block";
+            thinkContent.textContent = parsed.thinking;
+            if (parsed.isThinking) {
+              bubble.querySelector(".think-loader").style.display = "inline-block";
+            } else {
+              bubble.querySelector(".think-loader").style.display = "none";
+            }
+          }
+
+          if (parsed.answer) {
+            answerContent.innerHTML = formatMarkdown(parsed.answer);
+          } else {
+            answerContent.innerHTML = parsed.isThinking ? "Thinking..." : "";
+          }
+
+          // Auto-scroll as text streams
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+      } catch (err) {
+        console.error(err);
+        answerContent.textContent = "Error: Inference failed. Check console log.";
+      } finally {
+        promptInput.disabled = false;
+        btnSend.disabled = false;
+        promptInput.focus();
+      }
+    }
+
+    // Helper: Parse Chain of Thought tags
+    function parseCoT(text) {
+      let thinking = "";
+      let answer = "";
+      let isThinking = false;
+
+      const thinkStart = text.indexOf("<think>");
+      const thinkEnd = text.indexOf("</think>");
+
+      if (thinkStart !== -1) {
+        if (thinkEnd !== -1) {
+          thinking = text.substring(thinkStart + 7, thinkEnd).trim();
+          answer = text.substring(thinkEnd + 8).trim();
+        } else {
+          thinking = text.substring(thinkStart + 7).trim();
+          isThinking = true;
+        }
+      } else {
+        answer = text;
+      }
+
+      return { thinking, answer, isThinking };
+    }
+
+    // Helper: Render simple markdown features (code blocks, strong, list)
+    function formatMarkdown(text) {
+      // 1. Escape HTML entities
+      let html = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+      // 2. Format code blocks ```lang ... ```
+      const codeBlockRegex = /```(?:[a-zA-Z0-9]+)?
+([\s\S]*?)
+```/g;
+      html = html.replace(codeBlockRegex, (match, code) => {
+        const wrapId = "code-" + Math.random().toString(36).substr(2, 9);
+        return `<div class="code-block-wrap" id="${wrapId}">
+          <button class="copy-btn" onclick="copyCode('${wrapId}')">COPY</button>
+          <pre><code>${code}</code></pre>
+        </div>`;
+      });
+
+      // 3. Format inline code `code`
+      html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+      // 4. Format bold **text**
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+      // 5. Format lists * items
+      html = html.replace(/^\*\s+(.+)$/gm, "<li>$1</li>");
+      
+      return html;
+    }
+
+    // Bind copy button helper to window object for runtime access
+    window.copyCode = function(wrapId) {
+      const wrap = document.getElementById(wrapId);
+      const code = wrap.querySelector("code").innerText;
+      const btn = wrap.querySelector(".copy-btn");
+      
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = "COPIED ✓";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = "COPY";
+          btn.classList.remove("copied");
+        }, 2000);
+      });
+    };
+
+    function addMessage(text, sender) {
+      const msgRow = document.createElement("div");
+      msgRow.className = `msg-row ${sender}`;
+      msgRow.innerHTML = `<div class="bubble">${text}</div>`;
+      chatMessages.appendChild(msgRow);
+    }
+
+    // 4. Input events binding
+    promptInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    });
+
+    btnSend.addEventListener("click", handleSend);
+
+    // Dynamic height resize for textarea
+    promptInput.addEventListener("input", () => {
+      promptInput.style.height = "auto";
+      promptInput.style.height = promptInput.scrollHeight + "px";
+    });
+
+  </script>
+</body>
+</html>
