@@ -558,7 +558,7 @@
 
   <!-- Import WebLLM from ESM CDN -->
   <script type="module">
-    import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+    import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
     let engine = null;
     const webgpuAlert = document.getElementById("webgpuAlert");
@@ -603,7 +603,7 @@
       progressText.textContent = "Downloading model metadata...";
 
       try {
-        engine = await CreateMLCEngine(selectedModel, {
+        engine = await webllm.CreateMLCEngine(selectedModel, {
           initProgressCallback: (report) => {
             const percentage = Math.round(report.progress * 100);
             progressBar.style.width = percentage + "%";
