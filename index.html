@@ -243,22 +243,58 @@
     // ── 1. Load WebLLM via dynamic import (catches load failures) ─────
     let CreateMLCEngine = null;
 
-    try {
-      // Try primary CDN
-      const m = await import("https://esm.run/@mlc-ai/web-llm");
-      CreateMLCEngine = m.CreateMLCEngine;
-      if (!CreateMLCEngine) throw new Error("CreateMLCEngine not found in exports: " + Object.keys(m).join(", "));
-    } catch (e1) {
+    // Pin to v0.2.79 — first version with DeepSeek R1 models in prebuiltAppConfig
+    const CDN_URLS = [
+      "https://esm.run/@mlc-ai/web-llm@0.2.79",
+      "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.79/+esm",
+      "https://esm.run/@mlc-ai/web-llm"
+    ];
+
+    let webllm = null;
+    let lastErr = "";
+    for (const cdn of CDN_URLS) {
       try {
-        // Fallback CDN
-        const m2 = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm/+esm");
-        CreateMLCEngine = m2.CreateMLCEngine;
-        if (!CreateMLCEngine) throw new Error("Not found in fallback either");
-      } catch (e2) {
-        showError("Could not load AI engine from CDN. Error: " + e1.message + " | Fallback: " + e2.message);
-        statusText.textContent = "Engine load failed";
-        throw e2;
-      }
+        statusText.textContent = "Loading engine...";
+        webllm = await import(cdn);
+        if (webllm.CreateMLCEngine) { console.log("Loaded from:", cdn); break; }
+        webllm = null;
+        lastErr = "CreateMLCEngine missing in " + cdn;
+      } catch(e) { lastErr = e.message; webllm = null; }
+    }
+    if (!webllm) {
+      showError("Failed to load WebLLM from all CDNs. Last error: " + lastErr);
+      statusText.textContent = "Engine load failed";
+      throw new Error(lastErr);
+    }
+    CreateMLCEngine = webllm.CreateMLCEngine;
+
+    // Populate model dropdown from the library's own prebuiltAppConfig
+    const allModels = webllm.prebuiltAppConfig?.model_list || [];
+    const preferred = [
+      "DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC",
+      "DeepSeek-R1-Distill-Llama-8B-q4f32_1-MLC",
+      "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+      "Phi-3.5-mini-instruct-q4f16_1-MLC",
+      "gemma-2-2b-it-q4f16_1-MLC",
+      "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"
+    ];
+    const availableIds = allModels.map(m => m.model_id);
+    const modelsToShow = preferred.filter(id => availableIds.includes(id));
+    const extras = availableIds.filter(id => !preferred.includes(id) && id.toLowerCase().includes("1b")).slice(0, 3);
+    const finalList = [...new Set([...modelsToShow, ...extras])];
+
+    if (finalList.length > 0) {
+      modelSelect.innerHTML = "";
+      finalList.forEach(id => {
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = id.replace(/-q4f[0-9]+_[0-9]+-MLC/, "").replace(/-MLC$/, "");
+        modelSelect.appendChild(opt);
+      });
+      console.log("Available models:", finalList);
+    } else {
+      console.warn("No preferred models found. Available:", availableIds.slice(0, 10));
+      // Keep default HTML option as last resort
     }
 
     // ── 2. Check WebGPU ───────────────────────────────────────────────
